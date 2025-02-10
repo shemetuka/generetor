@@ -1,66 +1,70 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 import requests
 import os
 
 # Шлях до веб-драйвера
-driver_path = 'C:\Users\пк\Documents\generator\drivers\chromedriver.exe'  # Змініть на шлях до вашого chromedriver
+driver_path = "C:/tools/chromedriver-win64/chromedriver.exe"  # Змініть на шлях до вашого chromedriver
 
-# Ініціалізація веб-драйвера
-driver = webdriver.Chrome(driver_path)
+# Ініціалізація опцій для Chrome
+chrome_options = Options()
+chrome_options.add_argument("--headless")  # Запуск без графічного інтерфейсу
+chrome_options.add_argument("--no-sandbox")  # Для Linux-систем
+
+# Створення об'єкта Service для передавання шляху до chromedriver
+service = Service(driver_path)
+
+# Ініціалізація веб-драйвера з опціями
+driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # Функція для генерації зображення на основі промпту та збереження його
 def generate_image_and_download(prompt, folder="images", width=1920, height=1080, seed=232043480):
-    # Відкриваємо веб-сторінку генерації зображень
-    driver.get("https://image.pollinations.ai")
+    driver.get("https://pollinations.ai")
 
-    # Знаходимо поле вводу для промпту
-    input_element = driver.find_element(By.NAME, "prompt")  # Потрібно змінити, якщо на сторінці інший селектор для поля вводу
-    input_element.clear()  # Очищаємо поле вводу, якщо там щось є
+    try:
+        # Чекаємо, поки елемент з'явиться на сторінці
+        input_element = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "textarea"))
+        )
+        input_element.clear()
+        input_element.send_keys(prompt)
+        input_element.send_keys(Keys.RETURN)
 
-    # Вводимо промпт в поле
-    input_element.send_keys(prompt)
-    input_element.send_keys(Keys.RETURN)  # Надсилаємо запит, натискаючи Enter
+        time.sleep(5)  # Можна замінити на WebDriverWait для точнішої синхронізації
 
-    # Чекаємо на результат
-    time.sleep(5)  # Чекаємо, поки згенерується зображення (можна замінити на WebDriverWait для точнішої синхронізації)
+        # Генерація URL для зображення
+        image_url = f"https://image.pollinations.ai/prompt/{prompt}?width={width}&height={height}&seed={seed}&model=flux"
+        response = requests.get(image_url)
 
-    # Генерація URL для зображення з потрібними параметрами
-    image_url = f"https://image.pollinations.ai/prompt/{prompt}?width={width}&height={height}&seed={seed}&model=flux"
+        if response.status_code == 200:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
 
-    # Завантажуємо зображення за допомогою requests
-    response = requests.get(image_url)
-    
-    if response.status_code == 200:
-        # Створюємо папку для збереження зображень, якщо її немає
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-        
-        # Формуємо шлях до збереження зображення
-        image_filename = os.path.join(folder, f"{prompt[:10]}.jpg")  # Наприклад, беремо перші 10 символів промпту як ім'я файлу
-        
-        # Записуємо зображення в файл
-        with open(image_filename, 'wb') as file:
-            file.write(response.content)
-        
-        print(f"Зображення збережене як {image_filename}")
-    else:
-        print("Не вдалося завантажити зображення.")
+            image_filename = os.path.join(folder, f"{prompt[:10]}.jpg")
+            with open(image_filename, 'wb') as file:
+                file.write(response.content)
+            
+            print(f"Зображення збережене як {image_filename}")
+        else:
+            print("Не вдалося завантажити зображення.")
+    except Exception as e:
+        print(f"Помилка при роботі з елементом: {str(e)}")
 
 # Функція для обробки текстового файлу з промптами
 def process_prompts(file_name):
     with open(file_name, 'r') as file:
         prompts = file.readlines()
-    
+
     for prompt in prompts:
-        prompt = prompt.strip()  # Вилучаємо зайві пробіли та нові рядки
+        prompt = prompt.strip()
         if prompt:
-            generate_image_and_download(prompt)  # Генеруємо та завантажуємо зображення
+            generate_image_and_download(prompt)
 
-# Запускаємо обробку промптів з файлу
 process_prompts("prompts.txt")
-
-# Закриваємо браузер після виконання
 driver.quit()
